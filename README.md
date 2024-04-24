@@ -4,4 +4,4 @@ Paste the URL of the video you want to watch into the field labeled "YouTube Vid
 Other features include bookmark bookmarking and tracker prevention
 
 
-<img src="https://i.imgur.com/UG3mgHA.png" alt="Orb Browser Version1.0" title="Orb Browser Version1.0">
+<img src="https://i.imgur.com/jHt3f6i.png" alt="Orb Browser Version1.0" title="Orb Browser Version1.0">
