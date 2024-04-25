@@ -5,5 +5,5 @@ Other features include bookmark bookmarking and tracker prevention
 
 
 <img src="https://i.imgur.com/jHt3f6i.png" alt="Orb Browser Version1.0" title="Orb Browser Version1.0">
-The installer can be downloaded from the following URL
+The installer can also be downloaded from the following URL
 https://x.gd/T2wNS
