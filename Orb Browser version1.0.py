@@ -10,6 +10,7 @@ from PySide6.QtWidgets import *
 from PySide6.QtGui import *
 from PySide6.QtWebEngineWidgets import *
 from PySide6.QtWebEngineCore import QWebEngineProfile
+from PySide6.QtCore import QTimer
 import yt_dlp
 
 class AdblockX:
@@ -19,6 +20,9 @@ class AdblockX:
         self.tracker_lists = []
         self.adBlocker = adBlocker
         self.session = aiohttp.ClientSession()
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.session.close()
 
     async def fetch_lists(self, url):
         try:
@@ -57,20 +61,27 @@ class AdblockX:
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
-        self.vertical_bar = QToolBar("Vertical Bar")
-        self.vertical_bar.setOrientation(Qt.Orientation.Vertical)
-        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.vertical_bar)
+        self.language = "日本語"
+        self.tabs = QTabWidget()
+        self.memory_saver = MemorySaver(self.tabs)
+        self.dark_mode = DarkMode(self.tabs)
+        self.load_settings()
+        self.init_ui()
+
+    def init_ui(self):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.tabBarDoubleClicked.connect(self.tab_open_doubleclick)
         self.tabs.currentChanged.connect(self.current_tab_changed)
         self.tabs.setTabsClosable(True)
-        self.add_tab_button = QPushButton("+")
+        self.memory_saver = MemorySaver(self.tabs)
+        self.dark_mode = DarkMode(self.tabs)
+        self.add_tab_button = QPushButton("")
+        self.add_tab_button.setStyleSheet("background-color: black; color: black;")
         self.add_tab_button.clicked.connect(self.add_new_tab)
-        self.tabs.setCornerWidget(self.add_tab_button, Qt.TopRightCorner)
-
-        self.add_tab_button.setStyleSheet("background-color: gray; color: white;")
-        self.add_tab_button.clicked.connect(self.add_new_tab)
+        self.vertical_bar = QToolBar("Vertical Bar")
+        self.vertical_bar.setOrientation(Qt.Orientation.Vertical)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.vertical_bar)
         self.tabs.setCornerWidget(self.add_tab_button, Qt.TopRightCorner)
         self.tabs.tabCloseRequested.connect(self.close_current_tab)
         self.setCentralWidget(self.tabs)
@@ -79,11 +90,11 @@ class MainWindow(QMainWindow):
         navtb = QToolBar("Navigation")
         self.addToolBar(navtb)
         self.load_shortcuts()
-        back_btn = QAction("<", self)
+        back_btn = QAction("↩︎", self)
         back_btn.setStatusTip("Back to previous page")
         back_btn.triggered.connect(lambda: self.tabs.currentWidget().back())
         navtb.addAction(back_btn)
-        next_btn = QAction(">", self)
+        next_btn = QAction("↪︎", self)
         next_btn.setStatusTip("Forward to next page")
         next_btn.triggered.connect(lambda: self.tabs.currentWidget().forward())
         navtb.addAction(next_btn)
@@ -91,11 +102,11 @@ class MainWindow(QMainWindow):
         reload_btn.setStatusTip("Reload page")
         reload_btn.triggered.connect(lambda: self.tabs.currentWidget().reload())
         navtb.addAction(reload_btn)
-        home_btn = QAction("Home", self)
+        home_btn = QAction("🏠", self)
         home_btn.setStatusTip("Go home")
         self.toolbar = QToolBar("Actions")
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolbar)
-        self.star_button = QAction("☆", self)
+        self.star_button = QAction("⭐️", self)
         self.star_button.setStatusTip("Add shortcut to vertical bar")
         self.star_button.triggered.connect(self.add_shortcut)
         self.toolbar.addAction(self.star_button)
@@ -114,7 +125,7 @@ class MainWindow(QMainWindow):
         self.urlbar.returnPressed.connect(self.navigate_to_url)
         navtb.addWidget(self.urlbar)
         QWebEngineProfile.defaultProfile().downloadRequested.connect(self.on_downloadRequested)
-        stop_btn = QAction("X", self)
+        stop_btn = QAction("❌", self)
         stop_btn.setStatusTip("Stop loading current page")
         stop_btn.triggered.connect(lambda: self.tabs.currentWidget().stop())
         navtb.addAction(stop_btn)
@@ -127,11 +138,28 @@ class MainWindow(QMainWindow):
         self.show()
         self.setWindowTitle("")
         self.setStyleSheet("background-color: black; color: white;")  # 背景色を黒に変更
-        self.tabs.setStyleSheet("QTabBar::tab { color: black; }")
+        self.tabs.setStyleSheet("QTabBar::tab { background-color: white; color: black; }")
+        settings_btn = QAction("⚙️", self)
+        settings_btn.setStatusTip("設定")
+        settings_btn.triggered.connect(self.show_settings)
+        self.toolbar.addAction(settings_btn)
+        self.update_language()
+        ai_btn = QAction("AI", self)
+        ai_btn.setStatusTip("Use Orb AI")
+        ai_btn.triggered.connect(self.open_ai_tool)
+        navtb.addAction(ai_btn)
+    def open_ai_tool(self):
+        ai_url = QUrl("https://supertakerin2-comcomgptfree.hf.space/")
+        self.add_new_tab(ai_url, "AI Tool")
 
     def add_new_tab(self, qurl=None, label="ブランク"):
         if qurl is None:
             qurl = QUrl('https://takerin-123.github.io/qqqqq.github.io/')
+        elif isinstance(qurl, str):
+            qurl = QUrl(qurl)
+        elif not isinstance(qurl, QUrl):
+            raise TypeError("qurl must be a QUrl or a string")
+        
         browser = QWebEngineView()
         browser.setUrl(qurl)
         i = self.tabs.addTab(browser, label)
@@ -153,7 +181,7 @@ class MainWindow(QMainWindow):
         if self.tabs.count() < 2:
             return
         self.tabs.removeTab(i)
-
+        QWidget.deleteLater()
     def update_title(self, browser):
         if browser != self.tabs.currentWidget():
             return
@@ -291,6 +319,48 @@ class MainWindow(QMainWindow):
             tree = ET.ElementTree(root)
             tree.write('shortcuts.xml')
 
+    def show_settings(self):
+        settings_dialog = SettingsDialog(self, self.memory_saver, self.dark_mode, self.language)
+        settings_dialog.exec()
+        self.language = settings_dialog.language
+        self.save_settings()
+        self.update_language()
+
+    def save_settings(self):
+        root = ET.Element("settings")
+        tree = ET.ElementTree(root)
+        language_element = ET.SubElement(root, "language")
+        language_element.text = self.language
+        memory_saver_element = ET.SubElement(root, "memory_saver")
+        memory_saver_element.text = str(self.memory_saver.memory_saver_enabled)
+        dark_mode_element = ET.SubElement(root, "dark_mode")
+        dark_mode_element.text = str(self.dark_mode.dark_mode_enabled)
+        tree.write("settings.xml")
+
+    def load_settings(self):
+        if not os.path.exists("settings.xml"):
+            return
+        tree = ET.parse("settings.xml")
+        root = tree.getroot()
+        language_element = root.find("language")
+        if language_element is not None:
+            self.language = language_element.text
+        memory_saver_element = root.find("memory_saver")
+        if memory_saver_element is not None:
+            self.memory_saver.memory_saver_enabled = bool(memory_saver_element.text)
+        dark_mode_element = root.find("dark_mode")
+        if dark_mode_element is not None:
+            self.dark_mode.dark_mode_enabled = bool(dark_mode_element.text)
+        self.update_language()
+
+    def update_language(self):
+        if self.language == "日本語":
+            self.setWindowTitle("Orb Browser")
+        elif self.language == "English":
+            self.setWindowTitle("About Orb Browser")
+        elif self.language == "中文":
+            self.setWindowTitle("关于 Orb Browser")
+
 class BookmarkAction(QAction):
     def __init__(self, title, parent):
         super().__init__(title, parent)
@@ -314,6 +384,161 @@ class BookmarkAction(QAction):
                 tree.write('shortcuts.xml')
                 break
         self.parent().removeAction(self)
+
+class MemorySaver(QObject):
+    def __init__(self, tabs):
+        super().__init__()
+        self.tabs = tabs
+        self.tabs.currentChanged.connect(self.save_memory)
+        self.memory_saver_enabled = False
+        self.last_access_times = {}
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.check_inactive_tabs)
+        self.timer.start(60000)  # 1分ごとにチェック
+
+
+    def save_memory(self, index):
+        if self.memory_saver_enabled:
+            current_time = QDateTime.currentDateTime()
+            for i in range(self.tabs.count()):
+                if i != index:
+                    if i not in self.last_access_times:
+                        self.last_access_times[i] = current_time
+                    self.tabs.widget(i).setVisible(False)
+                else:
+                    self.last_access_times[i] = current_time
+                    self.tabs.widget(i).setVisible(True)
+        else:
+            for i in range(self.tabs.count()):
+                self.tabs.widget(i).setVisible(True)
+
+    def toggle_memory_saver(self, enabled):
+        self.memory_saver_enabled = enabled
+        self.save_memory(self.tabs.currentIndex())
+
+    def check_inactive_tabs(self):
+        if not self.memory_saver_enabled:
+            return
+
+        current_time = QDateTime.currentDateTime()
+        for i in range(self.tabs.count()):
+            if i != self.tabs.currentIndex():
+                last_access_time = self.last_access_times.get(i, current_time)
+                if last_access_time.secsTo(current_time) > 600:  # 10分以上経過
+                    self.tabs.widget(i).setVisible(False)
+                else:
+                    self.tabs.widget(i).setVisible(True)
+
+
+    
+
+class DarkMode(QObject):
+    def __init__(self, tabs):
+        super().__init__()
+        self.tabs = tabs
+        self.dark_mode_enabled = False
+
+    def toggle_dark_mode(self, enabled):
+        self.dark_mode_enabled = enabled
+        for i in range(self.tabs.count()):
+            web_view = self.tabs.widget(i)
+            if enabled:
+                web_view.page().setBackgroundColor(Qt.black)
+                self.apply_dark_mode_js(web_view)
+            
+            else:
+                web_view.page().setBackgroundColor(Qt.white)
+                self.remove_dark_mode_js(web_view)
+
+    def apply_dark_mode_js(self, web_view):
+        js_code = """
+        document.body.style.backgroundColor = 'black';
+        document.body.style.color = 'white';
+        """
+        web_view.page().runJavaScript(js_code)
+
+    def remove_dark_mode_js(self, web_view):
+        js_code = """
+        document.body.style.backgroundColor = 'white';
+        document.body.style.color = 'black';
+        """
+        web_view.page().runJavaScript(js_code)
+
+
+class SettingsDialog(QDialog):
+    def __init__(self, parent, memory_saver, dark_mode, language):
+        super().__init__(parent)
+        self.setWindowTitle("設定")
+        self.language = language
+        self.memory_saver = memory_saver
+        self.dark_mode = dark_mode
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        # ダークモードのトグルボタン
+        dark_mode_layout = QHBoxLayout()
+        dark_mode_toggle = QLabel("ダークモード")
+        self.dark_mode_toggle = QCheckBox()
+        self.dark_mode_toggle.setChecked(self.dark_mode.dark_mode_enabled)
+        self.dark_mode_toggle.toggled.connect(self.dark_mode.toggle_dark_mode)
+        dark_mode_layout.addWidget(self.dark_mode_toggle)
+        dark_mode_layout.addWidget(self.dark_mode_toggle)
+        layout.addLayout(dark_mode_layout)
+        self.dark_mode_toggle.setChecked(self.dark_mode.dark_mode_enabled)
+
+        # メモリーセイバーのトグルボタン
+        memory_saver_layout = QHBoxLayout()
+        memory_saver_toggle = QLabel("メモリーセイバー")
+        self.memory_saver_toggle = QCheckBox()
+        self.memory_saver_toggle.setChecked(self.memory_saver.memory_saver_enabled)
+        self.memory_saver_toggle.toggled.connect(self.memory_saver.toggle_memory_saver)
+        memory_saver_layout.addWidget(memory_saver_toggle)
+        memory_saver_layout.addWidget(self.memory_saver_toggle)
+        layout.addLayout(memory_saver_layout)
+        self.memory_saver_toggle.setChecked(self.memory_saver.memory_saver_enabled)
+
+        language_layout = QHBoxLayout()
+        language_label = QLabel("言語設定")
+        self.language_toggle = QComboBox()
+        self.language_toggle.addItems(["日本語", "English", "中文"])
+        self.language_toggle.setCurrentText(self.language)
+        self.language_toggle.currentTextChanged.connect(self.update_language)
+        language_layout.addWidget(self.language_toggle)
+        language_layout.addWidget(self.language_toggle)
+        layout.addLayout(language_layout)
+
+        # Orb Browserについて
+        self.about_layout = QHBoxLayout()
+        self.about_label = QLabel("Orb Browserについて")
+        self.about_text = QLabel("Orb Browserは、Python と Qt を使って作られた軽量なブラウザです。")
+        self.about_layout.addWidget(self.about_label)
+        self.about_layout.addWidget(self.about_text)
+        layout.addLayout(self.about_layout)
+
+        self.setLayout(layout)
+
+    def update_language(self, language):
+        self.language = language
+        if language == "日本語":
+            self.about_label.setText("Orb Browserについて")
+            self.about_text.setText("Orb Browserは、Python と Qt を使って作られた軽量なブラウザです")
+            self.setWindowTitle("設定")
+            self.dark_mode_toggle.setText("ダークモード")
+            self.memory_saver_toggle.setText("メモリーセイバー")
+        elif language == "English":
+            self.about_label.setText("About Orb Browser")
+            self.about_text.setText("Orb Browser is a lightweight and fast web browser developed using Python and QT.")
+            self.setWindowTitle("Settings")
+            self.dark_mode_toggle.setText("Dark Mode")
+            self.memory_saver_toggle.setText("Memory Saver")
+        elif language == "中文":
+            self.about_label.setText("关于 Orb 浏览器")
+            self.about_text.setText("Orb Browser 是一款使用 Python")
+            self.setWindowTitle("设置")
+            self.dark_mode_toggle.setText("暗模式")
+            self.memory_saver_toggle.setText("内存保护器")
 
 app = QApplication(sys.argv)
 app.setApplicationName("OrbBrowser")
